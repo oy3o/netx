@@ -84,9 +84,9 @@ func (c *ctxConn) Unwrap() net.Conn { return c.Conn }
 
 // Close 覆写 Close，确保连接关闭时 Context 被 Cancel
 func (c *ctxConn) Close() error {
-	err := c.Conn.Close()
-	c.closeOnce.Do(func() {
+	// 使用 defer 确保 cancel 一定执行，无论底层 Close 是否成功或 panic
+	defer c.closeOnce.Do(func() {
 		c.cancel() // 通知所有监听 ctx.Done() 的组件
 	})
-	return err
+	return c.Conn.Close()
 }

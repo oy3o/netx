@@ -18,7 +18,7 @@ func TestWithProxyProtocol(t *testing.T) {
 
 	// 应用 Proxy Protocol 中间件
 	// 允许 localhost 发送 proxy header
-	wrappedL := WithProxyProtocol([]string{"127.0.0.1"})(l)
+	wrappedL := WithProxyProtocol([]string{"127.0.0.1/32"})(l)
 	defer wrappedL.Close()
 
 	errCh := make(chan error, 1)

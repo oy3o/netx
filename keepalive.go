@@ -3,6 +3,8 @@ package netx
 import (
 	"net"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 // WithKeepAlive 返回一个中间件，自动开启 TCP KeepAlive。
@@ -33,8 +35,12 @@ func (l *keepAliveListener) Accept() (net.Conn, error) {
 		if period == 0 {
 			period = 3 * time.Minute
 		}
-		_ = tc.SetKeepAlive(true)
-		_ = tc.SetKeepAlivePeriod(period)
+		if err := tc.SetKeepAlive(true); err != nil {
+			log.Warn().Err(err).Msgf("failed to enable keepalive on %s", c.RemoteAddr())
+		}
+		if err := tc.SetKeepAlivePeriod(period); err != nil {
+			log.Warn().Err(err).Msgf("failed to set keepalive period on %s", c.RemoteAddr())
+		}
 	}
 
 	return c, nil

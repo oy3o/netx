@@ -3,6 +3,8 @@ package netx
 import (
 	"context"
 	"net"
+	"sync"
+	"time"
 
 	"golang.org/x/time/rate"
 )
@@ -48,12 +50,41 @@ func (l *shaperListener) Accept() (net.Conn, error) {
 	// 尝试获取 Context 用于限速等待时的取消
 	ctx := GetContext(c)
 
+	// 防御性编程。如果连接没有绑定 Context（说明 WithContext 中间件缺失或顺序错误），
+	// 我们必须手动创建一个与连接生命周期绑定的 Context。
+	// 否则，当连接关闭时，阻塞在 Take() 上的 Goroutine 将永远无法释放。
+	if ctx == context.Background() {
+		// 创建一个新的可取消 Context
+		newCtx, cancel := context.WithCancel(context.Background())
+		// 包装连接以确保 Close 时调用 cancel
+		c = &ctxFallbackConn{
+			Conn:   c,
+			cancel: cancel,
+		}
+		ctx = newCtx
+	}
+
 	return &throttledConn{
 		Conn: c,
 		ctx:  ctx,
 		rB:   rB,
 		wB:   wB,
 	}, nil
+}
+
+// 用于在缺失 WithContext 时提供兜底的 Context 绑定
+type ctxFallbackConn struct {
+	net.Conn
+	cancel    context.CancelFunc
+	closeOnce sync.Once
+}
+
+func (c *ctxFallbackConn) Close() error {
+	err := c.Conn.Close()
+	c.closeOnce.Do(func() {
+		c.cancel()
+	})
+	return err
 }
 
 type throttledConn struct {
@@ -134,8 +165,10 @@ func (c *udpShaperConn) ReadFrom(p []byte) (int, net.Addr, error) {
 			return n, addr, nil
 		}
 
-		// 限流触发：静默丢弃，循环继续读
-		// 注意：这里其实消耗了 CPU 来做丢包
+		// 限流触发：静默丢弃
+		// 增加短暂休眠，防止在泛洪攻击下 CPU 占用率飙升到 100% (忙等)
+		// 这会让出 CPU 时间片，利用内核缓冲区进行背压丢包
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -149,13 +182,14 @@ func (c *udpShaperConn) ReadMsgUDP(b, oob []byte) (n, oobn, flags int, addr *net
 		if c.cfg.Read == nil || c.cfg.Read.Allow() {
 			return
 		}
-		// 丢弃并重试
+		// 增加短暂休眠
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
 func (c *udpShaperConn) WriteMsgUDP(b, oob []byte, addr *net.UDPAddr) (n, oobn int, err error) {
 	if c.cfg.Write != nil && !c.cfg.Write.Allow() {
-		// 模拟丢包：返回 payload 长度和 oob 长度，伪装成发送成功
+		// 模拟丢包
 		return len(b), len(oob), nil
 	}
 	return c.UDPConn.WriteMsgUDP(b, oob, addr)
@@ -168,7 +202,7 @@ func (c *udpShaperConn) WriteTo(p []byte, addr net.Addr) (int, error) {
 	return c.UDPConn.WriteTo(p, addr)
 }
 
-// Unwrap 允许外部获取底层的 *net.UDPConn (可选，方便某些库进行类型断言检查)
+// Unwrap 允许外部获取底层的 *net.UDPConn
 func (c *udpShaperConn) Unwrap() net.PacketConn {
 	return c.UDPConn
 }
@@ -189,6 +223,8 @@ func (c *packetShaperConn) ReadFrom(p []byte) (int, net.Addr, error) {
 		if c.cfg.Read == nil || c.cfg.Read.Allow() {
 			return n, addr, nil
 		}
+		// 增加短暂休眠
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
