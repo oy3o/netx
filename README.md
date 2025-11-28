@@ -140,15 +140,16 @@ pc = netx.ChainUDP(pc,
 )
 ```
 
-## Utilities
+### Context Penetration & `AsTCPConn`
 
-### `AsTCPConn`
+`netx` wrappers allow you to reach deep into the connection stack.
 
-When connections are wrapped by `netx` (or `tls`), type assertions like `c.(*net.TCPConn)` will fail. `netx.AsTCPConn(c)` recursively unwraps the connection to find the underlying `*net.TCPConn`.
+*   **`GetContext(conn)`**: Retrieves the lifecycle context bound to the connection, even through TLS layers.
+*   **`AsTCPConn(conn)`**: Recursively unwraps layers (Metrics -> Limiter -> TLS) to return the underlying `*net.TCPConn`.
 
 ```go
-// Even if wrapped by Metrics -> Limiter -> Context -> TLS
-if tc := netx.AsTCPConn(req.Context().Value(contextKey).(net.Conn)); tc != nil {
+// Example: Setting TCP NoDelay on a wrapped TLS connection
+if tc := netx.AsTCPConn(req.Context().Value(http.LocalAddrContextKey).(net.Conn)); tc != nil {
     tc.SetNoDelay(true)
 }
 ```

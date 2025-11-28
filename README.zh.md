@@ -141,16 +141,16 @@ pc = netx.ChainUDP(pc,
 )
 ```
 
-## 工具函数
+## 上下文穿透与 `AsTCPConn`
 
-### `AsTCPConn`
+`netx` 包装器允许您深入访问连接栈的底层。
 
-当连接被 `netx` (或 `tls`) 包装后，直接使用 `c.(*net.TCPConn)` 进行类型断言会失败。`netx.AsTCPConn(c)` 可以递归解包，帮你找到最底层的 `*net.TCPConn`。
+*   **`GetContext(conn)`**: 获取绑定在连接上的生命周期上下文（Context），即使经过了 TLS 层的封装也能获取。
+*   **`AsTCPConn(conn)`**: 递归剥离封装层（Metrics -> Limiter -> TLS），返回底层的 `*net.TCPConn` 对象。
 
 ```go
-// 即使被 Metrics -> Limiter -> Context -> TLS 层层包裹
-if tc := netx.AsTCPConn(req.Context().Value(contextKey).(net.Conn)); tc != nil {
-    // 依然可以设置 TCP 特有属性
+// 示例：在封装的 TLS 连接上设置 TCP NoDelay
+if tc := netx.AsTCPConn(req.Context().Value(http.LocalAddrContextKey).(net.Conn)); tc != nil {
     tc.SetNoDelay(true)
 }
 ```
