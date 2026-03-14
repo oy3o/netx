@@ -3,11 +3,11 @@ module github.com/oy3o/netx
 go 1.25.3
 
 require (
-	github.com/pires/go-proxyproto v0.8.1
+	github.com/pires/go-proxyproto v0.11.0
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/sys v0.39.0
-	golang.org/x/time v0.14.0
+	golang.org/x/sys v0.42.0
+	golang.org/x/time v0.15.0
 )
 
 require (
